@@ -4,6 +4,8 @@ const connectDB = require('./config/database');
 const PORT = process.env.PORT;
 
 const usersRouter = require("./routes/users");
+const categoryRouter = require("./routes/category");
+const productRouter = require("./routes/product");
 
 const app = express();
 
@@ -12,7 +14,8 @@ connectDB();
 app.use(express.json());
 
 app.use("/users", usersRouter);
-
+app.use("/categories", categoryRouter);
+app.use("/products", productRouter);
 
 
 app.get('/', (req, res) => {
