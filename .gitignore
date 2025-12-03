@@ -1,4 +1,9 @@
-node_modules/
-package.json
-package-lock.json
+# Dependencies
+/node_modules
+
+# Environment variables
 .env
+
+# Logs
+logs/
+*.log
