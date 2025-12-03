@@ -6,6 +6,7 @@ const requestLogger = require('./middlewares/loggerMiddleware');
 const { monitoringMiddleware, client } = require('./middlewares/monitoringMiddleware');
 
 // routes
+const authRouter = require("./routes/auth");
 const usersRouter = require("./routes/users");
 const categoryRouter = require("./routes/category");
 const productRouter = require("./routes/product");
@@ -24,6 +25,7 @@ app.use((req, res, next) => {
   monitoringMiddleware(req, res, next);
 });
 
+app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/users", usersRouter);
 app.use("/api/v1/categories", categoryRouter);
 app.use("/api/v1/products", productRouter);
