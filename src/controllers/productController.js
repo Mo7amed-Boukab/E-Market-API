@@ -2,6 +2,7 @@ const Product = require('../models/product');
 const Category = require('../models/category');
 const ApiError = require('../utils/ApiError');
 const imageService = require('../services/imageService');
+const viewService = require('../services/viewService');
 
 class ProductController {
   /**
@@ -160,9 +161,8 @@ class ProductController {
         }
       }
 
-      // Incrémenter les vues
-      product.stats.views += 1;
-      await product.save();
+      // Incrémenter les vues de manière professionnelle (avec protection anti-spam)
+      await viewService.incrementView(product._id, req);
 
       res.status(200).json({ product });
     } catch (error) {
@@ -385,6 +385,62 @@ class ProductController {
       res.status(200).json({
         message: 'Image deleted successfully',
         product,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Obtenir les produits les plus vus
+   */
+  async getMostViewedProducts(req, res, next) {
+    try {
+      const { limit = 10, period = 'all' } = req.query;
+
+      // Valider la période
+      const validPeriods = ['today', 'week', 'month', 'all'];
+      if (!validPeriods.includes(period)) {
+        throw ApiError.badRequest('Invalid period. Must be: today, week, month, or all');
+      }
+
+      const products = await viewService.getMostViewedProducts(parseInt(limit), period);
+
+      res.status(200).json({
+        period,
+        limit: parseInt(limit),
+        products,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Obtenir les statistiques de vues d'un produit (Seller/Admin)
+   */
+  async getProductViewStats(req, res, next) {
+    try {
+      const { id } = req.params;
+      const userId = req.user.userId;
+      const userRole = req.user.role;
+
+      const product = await Product.findOne({ _id: id, deleted: false });
+
+      if (!product) {
+        throw ApiError.notFound('Product not found');
+      }
+
+      // Vérifier les permissions (seller propriétaire ou admin)
+      if (userRole !== 'admin' && product.seller.toString() !== userId) {
+        throw ApiError.forbidden('You can only view statistics of your own products');
+      }
+
+      const stats = await viewService.getViewStatistics(id);
+
+      res.status(200).json({
+        productId: id,
+        stats,
       });
     } catch (error) {
       next(error);

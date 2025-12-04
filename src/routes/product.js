@@ -85,4 +85,22 @@ router.delete(
     productController.deleteImage
 );
 
+/**
+ * Routes pour les statistiques de vues
+ */
+
+// GET /api/v1/products/stats/most-viewed - Produits les plus vus
+router.get(
+    '/stats/most-viewed',
+    productController.getMostViewedProducts
+);
+
+// GET /api/v1/products/:id/stats/views - Statistiques de vues d'un produit
+router.get(
+    '/:id/stats/views',
+    authenticate,
+    authorize('seller', 'admin'),
+    productController.getProductViewStats
+);
+
 module.exports = router;

@@ -11,3 +11,6 @@ logs/
 # Uploads
 uploads/*
 !uploads/.gitkeep
+
+# Documentation
+docs/
