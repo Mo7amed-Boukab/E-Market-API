@@ -1,140 +1,395 @@
 const Product = require('../models/product');
 const Category = require('../models/category');
-const mongoose = require('mongoose');
+const ApiError = require('../utils/ApiError');
+const imageService = require('../services/imageService');
 
 class ProductController {
-
-  async createProduct(req, res) {
+  /**
+   * Créer un nouveau produit (Seller/Admin)
+   */
+  async createProduct(req, res, next) {
     try {
-      const { title, description, price, stock, category, imageUrl } = req.body;
+      const { title, description, price, originalPrice, stock, categories, status, visibility, seo } = req.body;
+      const sellerId = req.user.userId;
 
-      if (!title || !description || !price || !stock || !category) {
-        return res.status(400).json({ message: 'All required fields must be provided.' });
+      // Vérifier que les catégories existent
+      const existingCategories = await Category.find({ _id: { $in: categories } });
+      if (existingCategories.length !== categories.length) {
+        throw ApiError.badRequest('One or more categories do not exist');
       }
 
-      const categoryExist = await Category.findOne({ name: category });
-      if (!categoryExist) {
-        return res.status(404).json({ message: 'Category not found.' });
+      // Traiter les images uploadées
+      let images = [];
+      if (req.files && req.files.length > 0) {
+        const optimizedImages = await imageService.optimizeMultipleImages(req.files);
+
+        images = optimizedImages
+          .filter(img => img.success)
+          .map((img, index) => ({
+            url: imageService.getImageUrl(img.optimized || img.webp),
+            thumbnail: img.thumbnail ? imageService.getImageUrl(img.thumbnail) : null,
+            alt: title,
+            isPrimary: index === 0, // La première image est principale par défaut
+          }));
       }
 
-      const newProduct = new Product({
-        title: title.trim(),
-        description: description.trim(),
+      // Créer le produit
+      const product = new Product({
+        title,
+        description,
         price,
+        originalPrice,
         stock,
-        category: category.trim(),
-        imageUrl: imageUrl || null,
+        categories,
+        images,
+        seller: sellerId,
+        status: status || 'published', // Par défaut published
+        visibility: visibility || 'public',
+        seo: seo || {},
       });
 
-      await newProduct.save();
+      await product.save();
 
-      return res.status(201).json({
-        message: 'Product created successfully.',
-        product: newProduct,
+      // Peupler les catégories et le seller pour la réponse
+      await product.populate('categories seller', 'name fullname email');
+
+      res.status(201).json({
+        message: 'Product created successfully',
+        product,
       });
-
     } catch (error) {
-      console.error('Error creating product:', error);
-      return res.status(500).json({ message: 'Server error while creating product.', error: error.message  });
+      next(error);
     }
   }
 
-  async getAllProducts(req, res) {
-     try {
-       const products = await Product.find({ deleted: false });
+  /**
+   * Récupérer tous les produits (avec filtres)
+   */
+  async getAllProducts(req, res, next) {
+    try {
+      const {
+        page = 1,
+        limit = 20,
+        status,
+        category,
+        seller,
+        minPrice,
+        maxPrice,
+        inStock,
+        search,
+        sort = '-createdAt',
+      } = req.query;
 
-       if (!products || products.length === 0) {
-         return res.status(404).json({ message: "No products found." });
-       }
+      // Construction du filtre
+      const filter = { deleted: false };
 
-       return res.status(200).json(products);
-
-     } catch (error) {
-       console.error("Error retrieving products:", error);
-       return res.status(500).json({message: "Server error while retrieving products.", error: error.message });
-     }
-   }
-
-
-  async getProductById(req, res) {
-      try {
-        const { id } = req.params; 
-
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-          return res.status(400).json({ message: 'Invalid product ID format.' });
-        }
-
-        const product = await Product.findById(id);
-        if (!product || product.deleted) {
-          return res.status(404).json({ message: 'Product not found.' });
-        }
-        return res.status(200).json(product);
-
-      } catch (error) {
-        console.error('Error retrieving product:', error);
-        return res.status(500).json({ message: 'Server error while retrieving product.', error: error.message });
+      // Filtres selon le rôle
+      if (req.user && req.user.role === 'seller') {
+        // Un seller ne voit que ses produits
+        filter.seller = req.user.userId;
+      } else if (!req.user || req.user.role === 'user') {
+        // Les users ne voient que les produits publiés et publics
+        filter.status = 'published';
+        filter.visibility = 'public';
       }
-   }
+      // Les admins voient tout
 
-   async updateProduct(req, res) {
-     try {
-       const { id } = req.params;
-       const { title, description, price, stock, category, imageUrl } = req.body;
-
-       if (!mongoose.Types.ObjectId.isValid(id)) {
-         return res.status(400).json({ message: 'Invalid product ID format.' });
-       }
-
-       const product = await Product.findById(id);
-       if (!product || product.deleted) {
-         return res.status(404).json({ message: 'Product not found.' });
-       }
-
-       if (category) {
-         const categoryExist = await Category.findOne({ name: category });
-
-         if (!categoryExist) {
-           return res.status(404).json({ message: 'Category not found.' });
-         }
-         product.category = category.trim();
-       }
-
-       if (title) product.title = title.trim();
-       if (description) product.description = description.trim();
-       if (price !== undefined) product.price = price;
-       if (stock !== undefined) product.stock = stock;
-       if (imageUrl !== undefined) product.imageUrl = imageUrl;
-
-       await product.save();
-
-       return res.status(200).json({ message: 'Product updated successfully.', product });
-
-     } catch (error) {
-       console.error('Error updating product:', error);
-       return res.status(500).json({ message: 'Server error while updating product.', error: error.message });
-     } 
-   }
-
-   async deleteProduct(req, res) {
-      try {
-        const { id } = req.params; 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-          return res.status(400).json({ message: 'Invalid product ID format.' });
-        }
-        const product = await Product.findById(id);
-        if (!product || product.deleted) {
-          return res.status(404).json({ message: 'Product not found.' });
-        } 
-        product.deleted = true;
-        await product.save();
-
-        return res.status(200).json({ message: 'Product deleted successfully.' });
-
-      } catch (error) {
-        console.error('Error deleting product:', error);
-        return res.status(500).json({ message: 'Server error while deleting product.', error: error.message });
+      // Filtres additionnels
+      if (status) filter.status = status;
+      if (category) filter.categories = category;
+      if (seller) filter.seller = seller;
+      if (minPrice || maxPrice) {
+        filter.price = {};
+        if (minPrice) filter.price.$gte = parseFloat(minPrice);
+        if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
       }
+      if (inStock === 'true') filter.stock = { $gt: 0 };
+
+      // Recherche full-text
+      if (search) {
+        filter.$text = { $search: search };
+      }
+
+      // Pagination
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      // Requête
+      const products = await Product.find(filter)
+        .populate('categories', 'name')
+        .populate('seller', 'fullname email')
+        .sort(sort)
+        .skip(skip)
+        .limit(parseInt(limit));
+
+      const total = await Product.countDocuments(filter);
+
+      res.status(200).json({
+        products,
+        pagination: {
+          total,
+          page: parseInt(page),
+          pages: Math.ceil(total / parseInt(limit)),
+          limit: parseInt(limit),
+        },
+      });
+    } catch (error) {
+      next(error);
     }
+  }
+
+  /**
+   * Récupérer un produit par ID
+   */
+  async getProductById(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const product = await Product.findOne({ _id: id, deleted: false })
+        .populate('categories', 'name')
+        .populate('seller', 'fullname email role');
+
+      if (!product) {
+        throw ApiError.notFound('Product not found');
+      }
+
+      // Vérifier les permissions
+      if (product.status === 'draft' || product.visibility === 'private') {
+        // Seul le seller ou un admin peut voir un produit draft/private
+        if (!req.user || (req.user.role !== 'admin' && product.seller._id.toString() !== req.user.userId)) {
+          throw ApiError.forbidden('You do not have permission to view this product');
+        }
+      }
+
+      // Incrémenter les vues
+      product.stats.views += 1;
+      await product.save();
+
+      res.status(200).json({ product });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Mettre à jour un produit (Seller propriétaire UNIQUEMENT)
+   */
+  async updateProduct(req, res, next) {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      const userId = req.user.userId;
+
+      // Trouver le produit
+      const product = await Product.findOne({ _id: id, deleted: false });
+
+      if (!product) {
+        throw ApiError.notFound('Product not found');
+      }
+
+      // Vérifier les permissions : SEUL le propriétaire peut modifier le contenu
+      if (product.seller.toString() !== userId) {
+        throw ApiError.forbidden('You can only update your own products.');
+      }
+
+      // Vérifier les catégories si elles sont mises à jour
+      if (updates.categories) {
+        const existingCategories = await Category.find({ _id: { $in: updates.categories } });
+        if (existingCategories.length !== updates.categories.length) {
+          throw ApiError.badRequest('One or more categories do not exist');
+        }
+      }
+
+      // Traiter les nouvelles images si uploadées
+      if (req.files && req.files.length > 0) {
+        const optimizedImages = await imageService.optimizeMultipleImages(req.files);
+
+        const newImages = optimizedImages
+          .filter(img => img.success)
+          .map(img => ({
+            url: imageService.getImageUrl(img.optimized || img.webp),
+            thumbnail: img.thumbnail ? imageService.getImageUrl(img.thumbnail) : null,
+            alt: updates.title || product.title,
+            isPrimary: false,
+          }));
+
+        // Ajouter les nouvelles images aux existantes
+        product.images.push(...newImages);
+      }
+
+      // Mettre à jour les champs
+      Object.keys(updates).forEach(key => {
+        if (key !== 'seller' && key !== 'images') { // Ne pas permettre de changer le seller
+          product[key] = updates[key];
+        }
+      });
+
+      await product.save();
+      await product.populate('categories seller', 'name fullname email');
+
+      res.status(200).json({
+        message: 'Product updated successfully',
+        product,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Supprimer un produit (soft delete)
+   * Admin : Modération
+   * Seller : Gestion de ses produits
+   */
+  async deleteProduct(req, res, next) {
+    try {
+      const { id } = req.params;
+      const userId = req.user.userId;
+      const userRole = req.user.role;
+
+      const product = await Product.findOne({ _id: id, deleted: false });
+
+      if (!product) {
+        throw ApiError.notFound('Product not found');
+      }
+
+      // Vérifier les permissions
+      if (userRole !== 'admin' && product.seller.toString() !== userId) {
+        throw ApiError.forbidden('You can only delete your own products');
+      }
+
+      // Soft delete
+      await product.softDelete();
+
+      res.status(200).json({
+        message: 'Product deleted successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Changer le status d'un produit
+   * Seller : draft <-> published
+   * Admin : published -> draft (Modération : retirer un produit)
+   */
+  async changeStatus(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const userId = req.user.userId;
+      const userRole = req.user.role;
+
+      const product = await Product.findOne({ _id: id, deleted: false });
+
+      if (!product) {
+        throw ApiError.notFound('Product not found');
+      }
+
+      // Logique de permission stricte
+      if (userRole === 'admin') {
+        // L'admin ne peut que DÉPUBLIER (mettre en draft) pour modération
+        if (status === 'published' && product.status === 'draft') {
+          throw ApiError.forbidden('Admins cannot publish products on behalf of sellers.');
+        }
+      } else {
+        // Le seller doit être propriétaire
+        if (product.seller.toString() !== userId) {
+          throw ApiError.forbidden('You can only change status of your own products');
+        }
+      }
+
+      product.status = status;
+      await product.save();
+
+      res.status(200).json({
+        message: `Product status changed to ${status}`,
+        product,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Définir l'image principale
+   */
+  async setPrimaryImage(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { imageIndex } = req.body;
+      const userId = req.user.userId;
+      const userRole = req.user.role;
+
+      const product = await Product.findOne({ _id: id, deleted: false });
+
+      if (!product) {
+        throw ApiError.notFound('Product not found');
+      }
+
+      // Vérifier les permissions
+      if (userRole !== 'admin' && product.seller.toString() !== userId) {
+        throw ApiError.forbidden('You can only modify your own products');
+      }
+
+      await product.setPrimaryImage(imageIndex);
+
+      res.status(200).json({
+        message: 'Primary image set successfully',
+        product,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Supprimer une image spécifique
+   */
+  async deleteImage(req, res, next) {
+    try {
+      const { id, imageIndex } = req.params;
+      const userId = req.user.userId;
+      const userRole = req.user.role;
+
+      const product = await Product.findOne({ _id: id, deleted: false });
+
+      if (!product) {
+        throw ApiError.notFound('Product not found');
+      }
+
+      // Vérifier les permissions
+      if (userRole !== 'admin' && product.seller.toString() !== userId) {
+        throw ApiError.forbidden('You can only modify your own products');
+      }
+
+      const index = parseInt(imageIndex);
+      if (index < 0 || index >= product.images.length) {
+        throw ApiError.badRequest('Invalid image index');
+      }
+
+      // Supprimer l'image du système de fichiers
+      const image = product.images[index];
+      await imageService.deleteImage(image.url);
+
+      // Retirer l'image du tableau
+      product.images.splice(index, 1);
+
+      // Si c'était l'image principale, définir la première comme principale
+      if (product.images.length > 0 && !product.images.some(img => img.isPrimary)) {
+        product.images[0].isPrimary = true;
+      }
+
+      await product.save();
+
+      res.status(200).json({
+        message: 'Image deleted successfully',
+        product,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = new ProductController();

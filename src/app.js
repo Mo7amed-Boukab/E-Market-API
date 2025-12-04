@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const logger = require('./utils/logger');
 const errorHandler = require('./middlewares/errorHandlerMiddleware');
 const notFound = require('./middlewares/notFoundMiddleware');
@@ -15,6 +16,9 @@ const app = express();
 
 // Lire JSON
 app.use(express.json());
+
+// Servir les fichiers statiques (images)
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Log des requêtes
 app.use(requestLogger);
