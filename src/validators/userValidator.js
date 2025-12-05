@@ -1,15 +1,19 @@
-const { body } = require('express-validator');
-const validatorMeddleware = require('../middlewares/validationMiddleware');
+const { body, param } = require('express-validator');
+const validatorMiddleware = require('../middlewares/validationMiddleware');
+const mongoose = require('mongoose');
 
+/**
+ * Validators pour les utilisateurs
+ */
+
+// Validator pour créer un utilisateur
 const createUserValidator = [
     body('fullname')
         .trim()
         .notEmpty()
-        .withMessage('Name is required')
-        .isString()
-        .withMessage('Name must be a string')
-        .isLength({ min: 3 })
-        .withMessage('Name must be at least 3 characters'),
+        .withMessage('Full name is required')
+        .isLength({ min: 3, max: 100 })
+        .withMessage('Full name must be between 3 and 100 characters'),
 
     body('email')
         .trim()
@@ -20,13 +24,24 @@ const createUserValidator = [
         .normalizeEmail(),
 
     body('password')
-        .trim()
         .notEmpty()
         .withMessage('Password is required')
-        .isLength({ min: 8 })
-        .withMessage('Password must be at least 8 characters'),
+        .isLength({ min: 6 })
+        .withMessage('Password must be at least 6 characters'),
 
-    validatorMeddleware,
+    validatorMiddleware,
 ];
 
-module.exports = { createUserValidator };
+// Validator pour l'ID utilisateur
+const userIdValidator = [
+    param('id')
+        .custom((id) => mongoose.Types.ObjectId.isValid(id))
+        .withMessage('Invalid user ID'),
+
+    validatorMiddleware,
+];
+
+module.exports = {
+    createUserValidator,
+    userIdValidator,
+};
