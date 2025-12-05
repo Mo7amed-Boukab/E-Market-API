@@ -1,103 +1,197 @@
-
 const Category = require('../models/category');
+const ApiError = require('../utils/ApiError');
+
 class CategoryController {
+  /**
+   * Créer une catégorie (Admin uniquement)
+   */
+  async createCategory(req, res, next) {
+    try {
+      const { name, description } = req.body;
 
-    async createCategory(req, res) {
-       try {
-         const { name } = req.body;
+      // Vérifier si la catégorie existe déjà
+      const existingCategory = await Category.findOne({
+        name: { $regex: new RegExp(`^${name}$`, 'i') },
+        deleted: false
+      });
 
-         if (!name) {
-           return res.status(400).json({ message: 'Missing required fields' });
-         }
-         
-         const category = new Category({ name }); 
-         await category.save();
-
-         return res.status(201).json({ message: 'Category created successfully', category });
-
-       } catch (error) {
-         console.error('Error creating category:', error);
-         return res.status(500).json({ message: 'Error creating category' });
-       }       
-    }
-
-    async getAllCategories(req, res) {
-      try {
-        const categories = await Category.find();
-
-        if (categories.length === 0) {
-          return res.status(404).json({ message: 'No categories found' });
-        }
-
-        return res.status(200).json(categories);
-
-      } catch (error) {
-        console.error('Error retrieving categories:', error);
-        return res.status(500).json({ message: 'Error retrieving categories' });
+      if (existingCategory) {
+        throw ApiError.badRequest('Category already exists');
       }
+
+      const category = new Category({ name, description });
+      await category.save();
+
+      res.status(201).json({
+        message: 'Category created successfully',
+        category,
+      });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async getCategoryById(req, res) {
-      try {
-        const { id } = req.params;
-        const category = await Category.findById(id);
+  /**
+   * Obtenir toutes les catégories (Public)
+   */
+  async getAllCategories(req, res, next) {
+    try {
+      const { includeDeleted = false } = req.query;
 
-        if (!category) {
-          return res.status(404).json({ message: 'Category not found' });
-        }
+      let query = Category.find();
 
-        return res.status(200).json(category);
-
-      } catch (error) {
-        console.error('Error retrieving category:', error);
-        return res.status(500).json({ message: 'Error retrieving category' });
+      // Par défaut, exclure les catégories supprimées
+      if (includeDeleted !== 'true' || req.user?.role !== 'admin') {
+        query = query.active();
       }
+
+      const categories = await query.sort('name');
+
+      res.status(200).json({
+        count: categories.length,
+        categories,
+      });
+    } catch (error) {
+      next(error);
     }
+  }
 
-    async updateCategory(req, res) {
-      try {
-        const { id } = req.params;
-        const { name } = req.body;
+  /**
+   * Obtenir une catégorie par ID
+   */
+  async getCategoryById(req, res, next) {
+    try {
+      const { id } = req.params;
 
-        if (!name) {
-          return res.status(400).json({ message: 'Missing required fields' });
-        }
+      const category = await Category.findOne({
+        _id: id,
+        deleted: false
+      });
 
-        const category = await Category.findById(id);
+      if (!category) {
+        throw ApiError.notFound('Category not found');
+      }
 
-        if (!category) {
-          return res.status(404).json({ message: 'Category not found' });
+      res.status(200).json({ category });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Mettre à jour une catégorie (Admin uniquement)
+   */
+  async updateCategory(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { name, description } = req.body;
+
+      const category = await Category.findOne({
+        _id: id,
+        deleted: false
+      });
+
+      if (!category) {
+        throw ApiError.notFound('Category not found');
+      }
+
+      // Vérifier si le nouveau nom existe déjà
+      if (name && name !== category.name) {
+        const existingCategory = await Category.findOne({
+          name: { $regex: new RegExp(`^${name}$`, 'i') },
+          _id: { $ne: id },
+          deleted: false,
+        });
+
+        if (existingCategory) {
+          throw ApiError.badRequest('Category name already exists');
         }
 
         category.name = name;
-        await category.save();
-
-        return res.status(200).json({ message: 'Category updated successfully', category });
-
-      } catch (error) {
-        console.error('Error updating category:', error);
-        return res.status(500).json({ message: 'Error updating category' });
       }
-    }
 
-    async deleteCategory(req, res) {
-      try {
-        const { id } = req.params;
-        const category = await Category.findById(id);
-
-        if (!category) {
-          return res.status(404).json({ message: 'Category not found' });
-        }
-
-        await Category.findByIdAndDelete(id);
-        return res.status(200).json({ message: 'Category deleted successfully' });
-
-      } catch (error) {
-        console.error('Error deleting category:', error);
-        return res.status(500).json({ message: 'Error deleting category' });
+      if (description !== undefined) {
+        category.description = description;
       }
-    }
 
+      await category.save();
+
+      res.status(200).json({
+        message: 'Category updated successfully',
+        category,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Supprimer une catégorie (Admin uniquement)
+   * Soft delete pour préserver l'intégrité des produits
+   */
+  async deleteCategory(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const category = await Category.findOne({
+        _id: id,
+        deleted: false
+      });
+
+      if (!category) {
+        throw ApiError.notFound('Category not found');
+      }
+
+      // Vérifier si des produits utilisent cette catégorie
+      const Product = require('../models/product');
+      const productsCount = await Product.countDocuments({
+        categories: id,
+        deleted: false,
+      });
+
+      if (productsCount > 0) {
+        throw ApiError.badRequest(
+          `Cannot delete category. ${productsCount} product(s) are using this category`
+        );
+      }
+
+      // Soft delete
+      await category.softDelete();
+
+      res.status(200).json({
+        message: 'Category deleted successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Restaurer une catégorie supprimée (Admin uniquement)
+   */
+  async restoreCategory(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const category = await Category.findOne({
+        _id: id,
+        deleted: true
+      });
+
+      if (!category) {
+        throw ApiError.notFound('Deleted category not found');
+      }
+
+      await category.restore();
+
+      res.status(200).json({
+        message: 'Category restored successfully',
+        category,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = new CategoryController();

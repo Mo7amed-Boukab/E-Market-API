@@ -13,10 +13,13 @@ class ProductController {
       const { title, description, price, originalPrice, stock, categories, status, visibility, seo } = req.body;
       const sellerId = req.user.userId;
 
-      // Vérifier que les catégories existent
-      const existingCategories = await Category.find({ _id: { $in: categories } });
+      // Vérifier que les catégories existent et ne sont pas supprimées
+      const existingCategories = await Category.find({
+        _id: { $in: categories },
+        deleted: false
+      });
       if (existingCategories.length !== categories.length) {
-        throw ApiError.badRequest('One or more categories do not exist');
+        throw ApiError.badRequest('One or more categories do not exist or are deleted');
       }
 
       // Traiter les images uploadées
@@ -193,9 +196,12 @@ class ProductController {
 
       // Vérifier les catégories si elles sont mises à jour
       if (updates.categories) {
-        const existingCategories = await Category.find({ _id: { $in: updates.categories } });
+        const existingCategories = await Category.find({
+          _id: { $in: updates.categories },
+          deleted: false
+        });
         if (existingCategories.length !== updates.categories.length) {
-          throw ApiError.badRequest('One or more categories do not exist');
+          throw ApiError.badRequest('One or more categories do not exist or are deleted');
         }
       }
 
