@@ -13,6 +13,7 @@ const categoryRouter = require("./routes/category");
 const productRouter = require("./routes/product");
 const cartRouter = require("./routes/cart");
 const orderRouter = require("./routes/order");
+const couponRouter = require("./routes/coupon");
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use("/api/v1/categories", categoryRouter);
 app.use("/api/v1/products", productRouter);
 app.use("/api/v1/cart", cartRouter);
 app.use("/api/v1/orders", orderRouter);
+app.use("/api/v1/coupons", couponRouter);
 
 app.get('/', (req, res) => {
   res.send('API is running...');

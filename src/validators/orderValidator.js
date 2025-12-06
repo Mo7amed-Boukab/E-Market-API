@@ -64,6 +64,12 @@ const createOrderValidator = [
         .isLength({ max: 500 })
         .withMessage('Notes cannot exceed 500 characters'),
 
+    body('couponCode')
+        .optional()
+        .trim()
+        .isLength({ min: 3, max: 20 })
+        .withMessage('Coupon code must be between 3 and 20 characters'),
+
     validatorMiddleware,
 ];
 

@@ -1,16 +1,17 @@
 const Order = require('../models/order');
 const Cart = require('../models/cart');
 const Product = require('../models/product');
+const Coupon = require('../models/coupon');
 const ApiError = require('../utils/ApiError');
 
 class OrderController {
     /**
-     * Créer une commande depuis le panier
+     * Créer une commande depuis le panier (avec coupon optionnel)
      */
     async createOrder(req, res, next) {
         try {
             const userId = req.user.userId;
-            const { shippingAddress, paymentMethod, notes } = req.body;
+            const { shippingAddress, paymentMethod, notes, couponCode } = req.body;
 
             // Récupérer le panier
             const cart = await Cart.findOne({ user: userId }).populate('items.product');
@@ -30,6 +31,7 @@ class OrderController {
 
             // Préparer les items de la commande avec snapshot
             const orderItems = [];
+            let subtotal = 0;
 
             for (const item of cart.items) {
                 const product = item.product;
@@ -41,12 +43,15 @@ class OrderController {
                     );
                 }
 
+                const itemTotal = product.price * item.quantity;
+                subtotal += itemTotal;
+
                 orderItems.push({
                     product: product._id,
                     productSnapshot: {
                         title: product.title,
                         price: product.price,
-                        images: product.images.slice(0, 1), // Première image uniquement
+                        images: product.images.slice(0, 1),
                     },
                     quantity: item.quantity,
                     price: product.price,
@@ -59,6 +64,45 @@ class OrderController {
                 await product.save();
             }
 
+            // Appliquer le coupon si fourni
+            let couponData = null;
+            if (couponCode) {
+                const coupon = await Coupon.findOne({
+                    code: couponCode.toUpperCase(),
+                    deleted: false
+                });
+
+                if (!coupon) {
+                    throw ApiError.notFound('Coupon not found');
+                }
+
+                // Vérifier si l'utilisateur peut utiliser le coupon
+                const userCheck = coupon.canUserUse(userId);
+                if (!userCheck.valid) {
+                    throw ApiError.badRequest(userCheck.reason);
+                }
+
+                // Vérifier le montant minimum
+                if (subtotal < coupon.minOrderAmount) {
+                    throw ApiError.badRequest(
+                        `Minimum order amount of ${coupon.minOrderAmount} DH required for this coupon`
+                    );
+                }
+
+                // Calculer la réduction
+                const discountAmount = coupon.calculateDiscount(subtotal, orderItems);
+
+                couponData = {
+                    code: coupon.code,
+                    discountType: coupon.discountType,
+                    discountValue: coupon.discountValue,
+                    discountAmount,
+                };
+
+                // Enregistrer l'utilisation du coupon
+                await coupon.recordUsage(userId);
+            }
+
             // Créer la commande
             const order = new Order({
                 user: userId,
@@ -66,9 +110,10 @@ class OrderController {
                 shippingAddress,
                 paymentMethod: paymentMethod || 'cash_on_delivery',
                 notes,
+                coupon: couponData,
             });
 
-            // Calculer les totaux
+            // Calculer les totaux (avec coupon si applicable)
             order.calculateTotals();
 
             await order.save();

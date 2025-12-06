@@ -91,11 +91,30 @@ const orderSchema = new mongoose.Schema({
         },
     },
 
+    // Coupon appliqué (si applicable)
+    coupon: {
+        code: String,
+        discountType: {
+            type: String,
+            enum: ['percentage', 'fixed', 'free_shipping'],
+        },
+        discountValue: Number,
+        discountAmount: {
+            type: Number,
+            default: 0,
+        },
+    },
+
     // Montants
     pricing: {
         subtotal: {
             type: Number,
             required: true,
+            min: 0,
+        },
+        discount: {
+            type: Number,
+            default: 0,
             min: 0,
         },
         shippingCost: {
@@ -262,7 +281,7 @@ orderSchema.pre('save', function (next) {
 });
 
 /**
- * Méthode pour calculer les totaux
+ * Méthode pour calculer les totaux (avec coupon si applicable)
  */
 orderSchema.methods.calculateTotals = function () {
     // Calculer le subtotal
@@ -270,20 +289,32 @@ orderSchema.methods.calculateTotals = function () {
         return sum + (item.price * item.quantity);
     }, 0);
 
-    // Calculer la taxe (20% par exemple)
-    const tax = subtotal * 0.20;
+    // Calculer la réduction du coupon
+    let discount = 0;
+    let shippingCost = subtotal >= 500 ? 0 : 50;
 
-    // Frais de livraison (gratuit si > 500 DH)
-    const shippingCost = subtotal >= 500 ? 0 : 50;
+    if (this.coupon && this.coupon.code) {
+        discount = this.coupon.discountAmount || 0;
+
+        // Si livraison gratuite
+        if (this.coupon.discountType === 'free_shipping') {
+            shippingCost = 0;
+        }
+    }
+
+    // Calculer la taxe (20%) sur le montant après réduction
+    const taxableAmount = subtotal - discount;
+    const tax = taxableAmount * 0.20;
 
     // Total
-    const total = subtotal + tax + shippingCost;
+    const total = subtotal - discount + tax + shippingCost;
 
     this.pricing = {
         subtotal,
+        discount,
         tax,
         shippingCost,
-        total,
+        total: Math.max(0, total), // Éviter les totaux négatifs
     };
 };
 
