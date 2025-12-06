@@ -3,6 +3,7 @@ const Cart = require('../models/cart');
 const Product = require('../models/product');
 const Coupon = require('../models/coupon');
 const ApiError = require('../utils/ApiError');
+const notificationService = require('../services/notificationService');
 
 class OrderController {
     /**
@@ -33,6 +34,9 @@ class OrderController {
             const orderItems = [];
             let subtotal = 0;
 
+            // Grouper les ventes par seller pour les notifications
+            const sellerSales = {};
+
             for (const item of cart.items) {
                 const product = item.product;
 
@@ -57,6 +61,12 @@ class OrderController {
                     price: product.price,
                     seller: product.seller,
                 });
+
+                // Préparer notification seller
+                if (!sellerSales[product.seller]) {
+                    sellerSales[product.seller] = 0;
+                }
+                sellerSales[product.seller] += itemTotal;
 
                 // Déduire le stock
                 product.stock -= item.quantity;
@@ -120,6 +130,16 @@ class OrderController {
 
             // Vider le panier
             await cart.clearCart();
+
+            // --- NOTIFICATIONS (Asynchrones) ---
+
+            // 1. Notifier l'acheteur
+            notificationService.notifyOrderCreated(order, userId).catch(err => console.error(err));
+
+            // 2. Notifier les vendeurs
+            for (const [sellerId, amount] of Object.entries(sellerSales)) {
+                notificationService.notifySellerNewSale(sellerId, order, amount).catch(err => console.error(err));
+            }
 
             // Peupler pour la réponse
             await order.populate([

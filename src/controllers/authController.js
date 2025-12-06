@@ -2,6 +2,7 @@ const User = require('../models/user');
 const ApiError = require('../utils/ApiError');
 const TokenBlacklist = require('../models/tokenBlacklist');
 const { generateToken, generateRefreshToken, decodeToken } = require('../utils/jwt');
+const notificationService = require('../services/notificationService');
 
 class AuthController {
     /**
@@ -26,6 +27,9 @@ class AuthController {
             });
 
             await newUser.save();
+
+            // Envoyer la notification de bienvenue (Asynchrone)
+            notificationService.notifyWelcome(newUser._id).catch(err => console.error(err));
 
             // Générer les tokens
             const payload = {
