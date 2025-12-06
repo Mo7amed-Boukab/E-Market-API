@@ -1,12 +1,13 @@
 const Notification = require('../models/notification');
 const emailService = require('./emailService');
+const socketService = require('./socketService');
 const User = require('../models/user');
 const logger = require('../utils/logger');
 
 class NotificationService {
     /**
      * Méthode générique pour envoyer une notification
-     * Gère à la fois l'In-App (DB) et l'Email
+     * Gère : In-App (DB), Email (SMTP) et Realtime (Socket)
      */
     async notify(recipientId, options) {
         try {
@@ -16,11 +17,11 @@ class NotificationService {
                 message,
                 link,
                 data,
-                email = null // Objet { subject, template, data } si email requis
+                email = null
             } = options;
 
             // 1. Créer la notification In-App (Toujours)
-            await Notification.create({
+            const notification = await Notification.create({
                 recipient: recipientId,
                 type,
                 title,
@@ -29,19 +30,23 @@ class NotificationService {
                 data
             });
 
-            // 2. Envoyer l'email (Si demandé)
+            // 2. Envoyer en Temps Réel (Socket.io)
+            // Le frontend écoutera l'événement 'notification'
+            socketService.emitToUser(recipientId.toString(), 'notification', notification);
+
+            // 3. Envoyer l'email (Si demandé)
             if (email) {
                 // Récupérer l'email du user si on ne l'a pas
                 const user = await User.findById(recipientId).select('email fullname');
                 if (user && user.email) {
-                    // Enrichir les données du template avec le nom du user
+                    // Enrichir les données du template
                     const templateData = {
                         userName: user.fullname,
                         ...email.data,
                         ...data
                     };
 
-                    // Envoyer de manière asynchrone (ne pas attendre la réponse)
+                    // Envoyer de manière asynchrone
                     emailService.sendEmail(
                         user.email,
                         email.subject,
