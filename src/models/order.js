@@ -185,6 +185,7 @@ const orderSchema = new mongoose.Schema({
 
     // Informations de paiement (si applicable)
     paymentInfo: {
+        paymentIntentId: String, // Stripe Payment Intent ID
         transactionId: String,
         paidAt: Date,
     },

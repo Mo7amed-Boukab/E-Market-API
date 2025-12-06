@@ -35,6 +35,12 @@ const userSchema = new mongoose.Schema({
     index: true,
   },
 
+  // Stripe Connect (pour les sellers)
+  stripeAccountId: {
+    type: String,
+    index: true,
+  },
+
   // Soft delete
   deleted: {
     type: Boolean,
