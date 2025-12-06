@@ -17,7 +17,7 @@ const couponRouter = require("./routes/coupon");
 const paymentRouter = require("./routes/payment");
 const stripeConnectRouter = require("./routes/stripeConnect");
 const sellerPayoutRouter = require("./routes/sellerPayout");
-
+const reviewRouter = require("./routes/review");
 
 const app = express();
 
@@ -36,6 +36,7 @@ app.use((req, res, next) => {
   monitoringMiddleware(req, res, next);
 });
 
+// Routes API
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/users", usersRouter);
 app.use("/api/v1/categories", categoryRouter);
@@ -46,6 +47,7 @@ app.use("/api/v1/coupons", couponRouter);
 app.use("/api/v1/payments", paymentRouter);
 app.use("/api/v1/stripe-connect", stripeConnectRouter);
 app.use("/api/v1/seller-payouts", sellerPayoutRouter);
+app.use("/api/v1/reviews", reviewRouter);
 
 app.get('/', (req, res) => {
   res.send('API is running...');

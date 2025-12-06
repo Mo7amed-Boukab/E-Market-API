@@ -148,6 +148,21 @@ const productSchema = new mongoose.Schema({
     index: true,
   },
 
+  // Système d'avis
+  averageRating: {
+    type: Number,
+    default: 0,
+    min: [0, 'Rating must be above 0'],
+    max: [5, 'Rating must be below 5'],
+    set: val => Math.round(val * 10) / 10, // Setter pour arrondir
+    index: true,
+  },
+
+  reviewCount: {
+    type: Number,
+    default: 0,
+  },
+
   deletedAt: {
     type: Date,
   },
@@ -156,6 +171,13 @@ const productSchema = new mongoose.Schema({
   timestamps: true, // createdAt et updatedAt automatiques
   toJSON: { virtuals: true },
   toObject: { virtuals: true },
+});
+
+// Virtual populate pour les avis
+productSchema.virtual('reviews', {
+  ref: 'Review',
+  foreignField: 'product',
+  localField: '_id',
 });
 
 // Index composés pour performance
