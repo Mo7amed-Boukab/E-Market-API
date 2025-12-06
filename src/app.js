@@ -15,6 +15,8 @@ const cartRouter = require("./routes/cart");
 const orderRouter = require("./routes/order");
 const couponRouter = require("./routes/coupon");
 const paymentRouter = require("./routes/payment");
+const stripeConnectRouter = require("./routes/stripeConnect");
+
 
 const app = express();
 
@@ -41,6 +43,7 @@ app.use("/api/v1/cart", cartRouter);
 app.use("/api/v1/orders", orderRouter);
 app.use("/api/v1/coupons", couponRouter);
 app.use("/api/v1/payments", paymentRouter);
+app.use("/api/v1/stripe-connect", stripeConnectRouter);
 
 app.get('/', (req, res) => {
   res.send('API is running...');

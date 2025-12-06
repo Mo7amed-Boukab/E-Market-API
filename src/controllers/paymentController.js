@@ -1,22 +1,22 @@
-const paymentService = require('../services/paymentService');
+const unifiedPaymentService = require('../services/unifiedPaymentService');
 const Order = require('../models/order');
 const ApiError = require('../utils/ApiError');
 
 class PaymentController {
     /**
-     * Créer une intention de paiement pour une commande
+     * Créer une intention de paiement (détection automatique Simple/Connect)
      */
     async createPaymentIntent(req, res, next) {
         try {
             const { orderId } = req.body;
             const userId = req.user.userId;
 
-            // Récupérer la commande
+            // Récupérer la commande avec les sellers
             const order = await Order.findOne({
                 _id: orderId,
                 user: userId,
                 deleted: false,
-            });
+            }).populate('items.seller', 'stripeAccountId fullname');
 
             if (!order) {
                 throw ApiError.notFound('Order not found');
@@ -32,21 +32,14 @@ class PaymentController {
                 throw ApiError.badRequest('Cannot pay for a cancelled order');
             }
 
-            // Créer la Payment Intent sur Stripe
-            const paymentIntent = await paymentService.createPaymentIntent(
-                order.pricing.total,
-                'mad', // Dirham Marocain
-                {
-                    orderId: order._id.toString(),
-                    orderNumber: order.orderNumber,
-                    userId: userId,
-                }
-            );
+            // Créer la Payment Intent (détection automatique)
+            const paymentIntent = await unifiedPaymentService.createPaymentIntent(order, userId);
 
             // Mettre à jour la commande avec les infos de paiement
             order.paymentInfo = {
                 ...order.paymentInfo,
                 paymentIntentId: paymentIntent.paymentIntentId,
+                paymentMethod: paymentIntent.paymentMethod,
             };
             await order.save();
 
@@ -55,6 +48,10 @@ class PaymentController {
                 clientSecret: paymentIntent.clientSecret,
                 amount: order.pricing.total,
                 currency: 'MAD',
+                paymentMethod: paymentIntent.paymentMethod,
+                note: paymentIntent.note,
+                platformFee: paymentIntent.platformFee,
+                sellerAmount: paymentIntent.sellerAmount,
             });
         } catch (error) {
             next(error);
