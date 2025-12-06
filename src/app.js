@@ -18,6 +18,7 @@ const paymentRouter = require("./routes/payment");
 const stripeConnectRouter = require("./routes/stripeConnect");
 const sellerPayoutRouter = require("./routes/sellerPayout");
 const reviewRouter = require("./routes/review");
+const wishlistRouter = require("./routes/wishlist");
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use("/api/v1/payments", paymentRouter);
 app.use("/api/v1/stripe-connect", stripeConnectRouter);
 app.use("/api/v1/seller-payouts", sellerPayoutRouter);
 app.use("/api/v1/reviews", reviewRouter);
+app.use("/api/v1/wishlist", wishlistRouter);
 
 app.get('/', (req, res) => {
   res.send('API is running...');
