@@ -20,6 +20,7 @@ const sellerPayoutRouter = require("./routes/sellerPayout");
 const reviewRouter = require("./routes/review");
 const wishlistRouter = require("./routes/wishlist");
 const notificationRouter = require("./routes/notification");
+const { globalLimiter } = require('./middlewares/rateLimitMiddleware');
 
 const app = express();
 
@@ -37,6 +38,9 @@ app.use((req, res, next) => {
   if (req.path === '/metrics') return next();
   monitoringMiddleware(req, res, next);
 });
+
+// Appliquer le Rate Limiting Global à toutes les routes API
+app.use('/api', globalLimiter);
 
 // Routes API
 app.use("/api/v1/auth", authRouter);

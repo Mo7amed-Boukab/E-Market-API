@@ -8,6 +8,7 @@ const {
     reviewIdValidator,
     getProductReviewsValidator,
 } = require('../validators/reviewValidator');
+const { reviewLimiter } = require('../middlewares/rateLimitMiddleware');
 
 /**
  * Routes des Avis (Reviews)
@@ -18,6 +19,7 @@ router.post(
     '/',
     authenticate,
     authorize('user'), // Seuls les users peuvent laisser des avis (pas les sellers/admins sur leurs propres produits)
+    reviewLimiter, // Protection Spam Avis
     createReviewValidator,
     reviewController.createReview
 );

@@ -8,20 +8,21 @@ const {
     changePasswordValidator,
     refreshTokenValidator,
 } = require('../validators/authValidator');
+const { authLimiter, createAccountLimiter } = require('../middlewares/rateLimitMiddleware');
 
 /**
  * @route   POST /api/v1/auth/register
  * @desc    Inscription d'un nouvel utilisateur
  * @access  Public
  */
-router.post('/register', registerValidator, authController.register);
+router.post('/register', createAccountLimiter, registerValidator, authController.register);
 
 /**
  * @route   POST /api/v1/auth/login
  * @desc    Connexion d'un utilisateur
  * @access  Public
  */
-router.post('/login', loginValidator, authController.login);
+router.post('/login', authLimiter, loginValidator, authController.login);
 
 /**
  * @route   POST /api/v1/auth/logout

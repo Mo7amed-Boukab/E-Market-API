@@ -9,6 +9,7 @@ const {
     orderIdValidator,
     orderListValidator,
 } = require('../validators/orderValidator');
+const { orderLimiter } = require('../middlewares/rateLimitMiddleware');
 
 /**
  * Routes des commandes
@@ -28,6 +29,7 @@ router.post(
     '/',
     authenticate,
     authorize('user', 'seller'),
+    orderLimiter, // Protection Inventaire
     createOrderValidator,
     orderController.createOrder
 );

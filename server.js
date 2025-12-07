@@ -1,3 +1,4 @@
+require('dotenv').config();
 const app = require('./src/app');
 const dbConnection = require('./src/config/database');
 const http = require('http');

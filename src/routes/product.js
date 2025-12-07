@@ -10,13 +10,14 @@ const {
     changeStatusValidator,
     setPrimaryImageValidator,
 } = require('../validators/productValidator');
+const { uploadLimiter, searchLimiter } = require('../middlewares/rateLimitMiddleware');
 
 /**
  * Routes publiques (sans authentification)
  */
 
-// GET /api/v1/products - Liste des produits publics
-router.get('/', productController.getAllProducts);
+// GET /api/v1/products - Liste des produits publics (Recherche incluse)
+router.get('/', searchLimiter, productController.getAllProducts);
 
 // GET /api/v1/products/:id - Détails d'un produit
 router.get('/:id', productIdValidator, productController.getProductById);
@@ -33,6 +34,7 @@ router.post(
     '/',
     authenticate,
     authorize('seller'),
+    uploadLimiter, // Protection Upload
     upload.array('images', 10), // Max 10 images
     handleMulterError,
     createProductValidator,
@@ -44,6 +46,7 @@ router.put(
     '/:id',
     authenticate,
     authorize('seller'),
+    uploadLimiter, // Protection Upload
     upload.array('images', 10),
     handleMulterError,
     updateProductValidator,
